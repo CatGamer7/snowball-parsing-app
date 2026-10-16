@@ -1,10 +1,12 @@
-appId: com.electron.app
-productName: frontend
+appId: ru.tpu.snowball
+productName: Snowball
 directories:
-  buildResources: build
+  buildResources: build 
+  output: dist 
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  - '!docs/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
@@ -12,32 +14,26 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: frontend
+  executableName: snowball
+  target:
+    - nsis
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
+  maintainer: snowball-team
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
