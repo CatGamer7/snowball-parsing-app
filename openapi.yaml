@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: snowball-parsing-app API
+  version: 0.1.0
+  description: |
+    Локальный API бэкенда для экрана ввода начальных записей, токена и метода сравнения.
+    Бэкенд слушает только 127.0.0.1. Ошибки возвращаются в едином формате (схема Error).
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Локальный бэкенд (порт задаётся переменной SNOWBALL_PORT)
+
+tags:
+  - name: service
+    description: Служебные точки
+  - name: vk
+    description: Работа с VK
+  - name: collection
+    description: Сбор данных
+
+paths:
+  /health:
+    get:
+      tags: [service]
+      summary: Проверка, что бэкенд запущен
+      operationId: health
+      responses:
+        "200":
+          description: Бэкенд работает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+              example:
+                status: ok
+
+  /vk/validate:
+    post:
+      tags: [vk]
+      summary: Проверить токен VK
+      description: |
+        Проверяет, что токен действителен и подходит для сбора данных.
+        Подходят сервисный ключ и ключ пользователя. Ключ сообщества отклоняется (403).
+      operationId: validateVkToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRequest"
+            example:
+              token: vk1.a.XXXXXXXX
+      responses:
+        "200":
+          description: Токен действителен и подходит
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateResponse"
+              examples:
+                serviceToken:
+                  summary: Сервисный ключ
+                  value:
+                    valid: true
+                    token_type: service
+                userToken:
+                  summary: Ключ пользователя
+                  value:
+                    valid: true
+                    token_type: user
+                    user:
+                      id: 123456
+                      name: Иван Иванов
+        "401":
+          $ref: "#/components/responses/InvalidToken"
+        "403":
+          $ref: "#/components/responses/UnsupportedTokenType"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+        "502":
+          $ref: "#/components/responses/VkUnavailable"
+
+  /collection/models:
+    get:
+      tags: [collection]
+      summary: Список моделей сравнения текстов
+      description: Модели, которые можно выбрать в правилах сбора (поле rules.model_id).
+      operationId: listModels
+      responses:
+        "200":
+          description: Доступные модели
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Model"
+              example:
+                - id: rubert-tiny2
+                  name: ruBERT tiny 2
+                  description: Быстрая модель для русского языка
+                - id: multilingual-e5-small
+                  name: Multilingual E5 small
+                  description: Точнее, но медленнее
+
+  /collection/start:
+    post:
+      tags: [collection]
+      summary: Запустить сбор данных
+      description: |
+        Запускает сбор методом «снежного кома» в фоне и сразу возвращает идентификатор сбора.
+        Получение статуса и выгрузка результатов описываются в отдельных задачах.
+      operationId: startCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRequest"
+            example:
+              token: vk1.a.XXXXXXXX
+              seeds:
+                - type: group
+                  id: tpu_official
+                - type: post
+                  id: "-123456_789"
+              rules:
+                model_id: rubert-tiny2
+                threshold: 0.75
+                max_depth: 2
+      responses:
+        "202":
+          description: Сбор принят и запущен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartResponse"
+              example:
+                collection_id: 3f2a9c1e
+                status: running
+        "401":
+          $ref: "#/components/responses/InvalidToken"
+        "403":
+          $ref: "#/components/responses/UnsupportedTokenType"
+        "404":
+          $ref: "#/components/responses/ModelNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+        "502":
+          $ref: "#/components/responses/VkUnavailable"
+
+components:
+  schemas:
+    ValidateRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Сервисный ключ доступа (кабинет VK ID → приложение → Ключи доступа) или ключ пользователя
+
+    ValidateResponse:
+      type: object
+      required: [valid, token_type]
+      properties:
+        valid:
+          type: boolean
+        token_type:
+          type: string
+          enum: [user, service]
+          description: Тип ключа доступа VK
+        user:
+          type: object
+          description: Есть только у ключа пользователя
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+
+    Model:
+      type: object
+      description: "ЧЕРНОВИК: состав полей согласовать с ML"
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          description: Идентификатор модели, передаётся в rules.model_id
+        name:
+          type: string
+          description: Название для отображения пользователю
+        description:
+          type: string
+
+    Seed:
+      type: object
+      description: Начальная запись
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [group, user, post]
+        id:
+          type: string
+          description: |
+            group/user: числовой id или короткое имя из адреса VK (vk.com/tpu_official → tpu_official).
+            post: идентификатор вида {owner_id}_{post_id}, например -123456_789.
+
+    Rules:
+      type: object
+      description: "ЧЕРНОВИК: правила выявления схожего контента, согласовать с ML"
+      required: [model_id, threshold]
+      properties:
+        model_id:
+          type: string
+          description: Модель из GET /collection/models
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Минимальная схожесть, при которой запись попадает в выборку
+        max_depth:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 2
+          description: Сколько волн расширения выборки выполнить
+
+    StartRequest:
+      type: object
+      required: [token, seeds, rules]
+      properties:
+        token:
+          type: string
+          description: Токен VK (тот же, что проверялся в /vk/validate)
+        seeds:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Seed"
+        rules:
+          $ref: "#/components/schemas/Rules"
+
+    StartResponse:
+      type: object
+      required: [collection_id, status]
+      properties:
+        collection_id:
+          type: string
+          description: Идентификатор сбора, понадобится для получения статуса и результатов
+        status:
+          type: string
+          enum: [running]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Машиночитаемый код ошибки
+              enum:
+                - INVALID_TOKEN
+                - UNSUPPORTED_TOKEN_TYPE
+                - MODEL_NOT_FOUND
+                - VALIDATION_ERROR
+                - VK_QUOTA_EXCEEDED
+                - VK_UNAVAILABLE
+            message:
+              type: string
+              description: Текст для пользователя
+
+  responses:
+    InvalidToken:
+      description: Токен недействителен или истёк
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: INVALID_TOKEN
+              message: Токен VK недействителен
+    UnsupportedTokenType:
+      description: Токен действителен, но его тип не подходит для сбора данных
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: UNSUPPORTED_TOKEN_TYPE
+              message: Ключ сообщества не подходит. Используйте сервисный ключ или ключ пользователя
+    ModelNotFound:
+      description: Указанная модель не найдена
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: MODEL_NOT_FOUND
+              message: Модель unknown-model не найдена
+    ValidationError:
+      description: Некорректные входные данные
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Нужно указать хотя бы одну начальную запись
+    QuotaExceeded:
+      description: Исчерпан лимит вызовов VK API
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: VK_QUOTA_EXCEEDED
+              message: Исчерпан месячный лимит запросов к VK API
+    VkUnavailable:
+      description: VK API недоступен или вернул ошибку
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: VK_UNAVAILABLE
+              message: Не удалось связаться с VK API
