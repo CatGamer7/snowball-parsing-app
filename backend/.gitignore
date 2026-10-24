@@ -12,3 +12,5 @@ dist/
 
 # Тесты
 .pytest_cache/
+
+.env
