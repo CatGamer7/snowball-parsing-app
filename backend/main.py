@@ -13,6 +13,7 @@ from api.errors import (
 )
 from api.model_catalog import MODELS
 from api.schemas import ModelInfo
+from api.vk_routes import router as vk_router
 from config import HOST, PORT
 
 
@@ -33,6 +34,8 @@ app.add_exception_handler(
 )
 
 app.add_exception_handler(Exception, internal_error_handler)
+
+app.include_router(vk_router)
 
 
 @app.middleware("http")
