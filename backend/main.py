@@ -3,9 +3,17 @@ import time
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 
+from api.errors import (
+    APIError,
+    api_error_handler,
+    internal_error_handler,
+    validation_error_handler,
+)
+from api.model_catalog import MODELS
+from api.schemas import ModelInfo
 from config import HOST, PORT
-from model_catalog import MODELS
 
 
 logging.basicConfig(
@@ -16,6 +24,15 @@ logging.basicConfig(
 logger = logging.getLogger("snowball.api")
 
 app = FastAPI(title="snowball-parsing-app")
+
+app.add_exception_handler(APIError, api_error_handler)
+
+app.add_exception_handler(
+    RequestValidationError,
+    validation_error_handler,
+)
+
+app.add_exception_handler(Exception, internal_error_handler)
 
 
 @app.middleware("http")
@@ -53,7 +70,10 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/collection/models")
+@app.get(
+    "/collection/models",
+    response_model=list[ModelInfo],
+)
 def list_models() -> list[dict]:
     return MODELS
 
