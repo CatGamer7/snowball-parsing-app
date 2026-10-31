@@ -29,6 +29,7 @@ Node.js 20+
 | `npm run build` | проверить типы и собрать приложение в `out/` |
 | `npm run start` | запустить собранную версию |
 | `npm run build:win` | собрать установщик для Windows |
+| `npm run test:e2e` | собрать и прогнать e2e-тесты Playwright (подробнее в `e2e/README.md`) |
 
 ## Структура
 
