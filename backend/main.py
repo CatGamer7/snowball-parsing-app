@@ -4,7 +4,9 @@ import time
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
+from api.collection_routes import router as collection_router
 from api.errors import (
     APIError,
     api_error_handler,
@@ -36,6 +38,7 @@ app.add_exception_handler(
 app.add_exception_handler(Exception, internal_error_handler)
 
 app.include_router(vk_router)
+app.include_router(collection_router)
 
 
 @app.middleware("http")
@@ -66,6 +69,18 @@ async def log_requests(request: Request, call_next):
     )
 
     return response
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")
