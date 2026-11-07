@@ -1,0 +1,16 @@
+{
+  "text": "Иван Петров выступил на форуме компании Яндекс в Москве 15 октября.",
+  "models": {
+    "urchade/gliner_multi-v2.1": {
+      "labels": [
+        "person",
+        "organization",
+        "city",
+        "country",
+        "date",
+        "event"
+      ],
+      "threshold": 0.5
+    }
+  }
+}

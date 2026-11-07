@@ -1,0 +1,9 @@
+gliner
+torch
+transformers
+huggingface-hub
+sentencepiece
+protobuf
+tiktoken
+safetensors
+numpy
