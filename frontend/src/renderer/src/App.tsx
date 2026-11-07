@@ -1,123 +1,239 @@
-import { useState } from 'react'
-import { ApiError, checkHealth, getModels, startCollection, validateToken } from './api'
-import type { Seed } from './api'
+import { useEffect, useState } from 'react'
+import { ApiError, getModels, startCollection } from './api'
+import type { Model, Seed, SelectedModels, StartResponse } from './api'
+import ModelsSection from './components/ModelsSection'
+import type { ModelSettings } from './components/ModelsSection'
+import SeedsSection from './components/SeedsSection'
+import TokenSection from './components/TokenSection'
+import { MAX_SEEDS, validateThreshold, validateTokenInput } from './validation'
+
+const GLINER_ID = 'urchade/gliner_multi-v2.1'
+const WIKINEURAL_ID = 'Babelscape/wikineural-multilingual-ner'
 
 function App(): React.JSX.Element {
   const [token, setToken] = useState('')
-  const [seedType, setSeedType] = useState<Seed['type']>('group')
-  const [seedId, setSeedId] = useState('')
-  const [result, setResult] = useState('Нажмите кнопку для проверки')
-  const [loading, setLoading] = useState(false)
+  const [tokenVerified, setTokenVerified] = useState(false)
+  const [seeds, setSeeds] = useState<Seed[]>([])
+  const [models, setModels] = useState<Model[]>([])
+  const [modelsLoading, setModelsLoading] = useState(true)
+  const [modelsError, setModelsError] = useState('')
+  const [reloadCount, setReloadCount] = useState(0)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState('')
+  const [started, setStarted] = useState<StartResponse | null>(null)
 
-  async function run(action: () => Promise<unknown>): Promise<void> {
-    setLoading(true)
-    setResult('Загрузка…')
+  const [settings, setSettings] = useState<ModelSettings>({
+    gliner: false,
+    wikineural: false,
+    labels: 'person, organization, city',
+    threshold: '0.5',
+    maxDepth: 2
+  })
+
+  useEffect(() => {
+    let active = true
+
+    async function loadModels(): Promise<void> {
+      setModelsLoading(true)
+      setModelsError('')
+
+      try {
+        const catalog = await getModels()
+
+        if (active) {
+          setModels(catalog)
+        }
+      } catch (caught: unknown) {
+        if (active) {
+          setModels([])
+          setModelsError(
+            caught instanceof ApiError ? caught.message : 'Не удалось загрузить модели'
+          )
+        }
+      } finally {
+        if (active) {
+          setModelsLoading(false)
+        }
+      }
+    }
+
+    void loadModels()
+
+    return () => {
+      active = false
+    }
+  }, [reloadCount])
+
+  function clearStartResult(): void {
+    setStartError('')
+    setStarted(null)
+  }
+
+  function changeToken(value: string): void {
+    setToken(value)
+    setTokenVerified(false)
+    clearStartResult()
+  }
+
+  function changeSeeds(value: Seed[]): void {
+    setSeeds(value)
+    clearStartResult()
+  }
+
+  function changeSettings(value: ModelSettings): void {
+    setSettings(value)
+    clearStartResult()
+  }
+
+  const labels = Array.from(
+    new Set(
+      settings.labels
+        .split(',')
+        .map((label) => label.trim())
+        .filter(Boolean)
+    )
+  )
+
+  const glinerAvailable = models.some((model) => model.id === GLINER_ID)
+  const wikineuralAvailable = models.some((model) => model.id === WIKINEURAL_ID)
+
+  let thresholdValid = true
+
+  try {
+    validateThreshold(settings.threshold)
+  } catch {
+    thresholdValid = false
+  }
+
+  const selectionValid =
+    (settings.gliner || settings.wikineural) &&
+    (!settings.gliner || (glinerAvailable && labels.length > 0)) &&
+    (!settings.wikineural || wikineuralAvailable)
+
+  const canStart =
+    !starting &&
+    !modelsLoading &&
+    !modelsError &&
+    tokenVerified &&
+    validateTokenInput(token) === null &&
+    seeds.length > 0 &&
+    seeds.length <= MAX_SEEDS &&
+    selectionValid &&
+    thresholdValid &&
+    Number.isInteger(settings.maxDepth) &&
+    settings.maxDepth >= 1 &&
+    settings.maxDepth <= 5
+
+  async function handleStart(): Promise<void> {
+    if (!canStart) return
+
+    setStarting(true)
+    setStartError('')
+    setStarted(null)
 
     try {
-      const data = await action()
-      setResult(JSON.stringify(data, null, 2) ?? 'Пустой ответ')
-    } catch (error: unknown) {
-      if (error instanceof ApiError) {
-        setResult(
-          [
-            `Ошибка: ${error.kind}`,
-            error.message,
-            error.status ? `HTTP: ${error.status}` : '',
-            error.code ? `Код: ${error.code}` : ''
-          ]
-            .filter(Boolean)
-            .join('\n')
-        )
+      let selectedModels: SelectedModels
+
+      if (settings.gliner) {
+        selectedModels = settings.wikineural
+          ? {
+              'urchade/gliner_multi-v2.1': { labels },
+              'Babelscape/wikineural-multilingual-ner': {}
+            }
+          : {
+              'urchade/gliner_multi-v2.1': { labels }
+            }
       } else {
-        setResult('Произошла непредвиденная ошибка')
+        selectedModels = {
+          'Babelscape/wikineural-multilingual-ner': {}
+        }
       }
+
+      const response = await startCollection({
+        token,
+        seeds,
+        rules: {
+          models: selectedModels,
+          threshold: validateThreshold(settings.threshold),
+          max_depth: settings.maxDepth
+        }
+      })
+
+      setStarted(response)
+    } catch (caught: unknown) {
+      setStartError(
+        caught instanceof ApiError
+          ? caught.message
+          : 'Не удалось отправить задание. Попробуйте ещё раз'
+      )
     } finally {
-      setLoading(false)
+      setStarting(false)
     }
   }
 
-  function testStart(): void {
-    void run(() =>
-      startCollection({
-        token: token.trim(),
-        seeds: [{ type: seedType, id: seedId.trim() }],
-        rules: {
-          models: {
-            'urchade/gliner_multi-v2.1': {
-              labels: ['person', 'organization', 'city']
-            }
-          },
-          threshold: 0.5,
-          max_depth: 2
-        }
-      })
-    )
-  }
-
   return (
-    <main className="app">
-      <h1>Snowball — проверка API</h1>
+    <main className="settings-page">
+      <h1>Параметры сбора</h1>
 
-      <p>
-        <button disabled={loading} onClick={() => void run(checkHealth)}>
-          Проверить сервер
-        </button>{' '}
-        <button disabled={loading} onClick={() => void run(getModels)}>
-          Получить модели
-        </button>
-      </p>
+      <TokenSection
+        token={token}
+        disabled={starting}
+        onTokenChange={changeToken}
+        onVerifiedChange={setTokenVerified}
+      />
 
-      <p>
-        <label>
-          Токен VK:{' '}
-          <input
-            type="password"
-            autoComplete="off"
-            value={token}
-            disabled={loading}
-            onChange={(event) => setToken(event.target.value)}
-          />
-        </label>{' '}
+      <SeedsSection seeds={seeds} disabled={starting} onSeedsChange={changeSeeds} />
+
+      <ModelsSection
+        models={models}
+        loading={modelsLoading}
+        loadError={modelsError}
+        disabled={starting}
+        settings={settings}
+        onSettingsChange={changeSettings}
+        onReload={() => {
+          setModelsLoading(true)
+          setModelsError('')
+          clearStartResult()
+          setReloadCount((previous) => previous + 1)
+        }}
+      />
+
+      <div className="start-actions">
         <button
-          disabled={loading || !token.trim()}
-          onClick={() => void run(() => validateToken({ token: token.trim() }))}
+          className="button button-primary"
+          type="button"
+          disabled={!canStart || started !== null}
+          onClick={() => void handleStart()}
         >
-          Проверить токен
+          {starting ? 'Отправляем задание…' : started ? 'Задание принято' : 'Начать сбор'}
         </button>
-      </p>
 
-      <p>
-        <label>
-          Тип источника:{' '}
-          <select
-            value={seedType}
-            disabled={loading}
-            onChange={(event) => setSeedType(event.target.value as Seed['type'])}
-          >
-            <option value="group">Сообщество</option>
-            <option value="user">Пользователь</option>
-            <option value="post">Пост</option>
-          </select>
-        </label>
-      </p>
+        {!canStart && !starting && !started && (
+          <p className="field-hint">
+            Проверьте токен, добавьте начальные записи и заполните настройки моделей.
+          </p>
+        )}
+      </div>
 
-      <p>
-        <label>
-          ID источника без ссылки:{' '}
-          <input
-            value={seedId}
-            disabled={loading}
-            onChange={(event) => setSeedId(event.target.value)}
-          />
-        </label>{' '}
-        <button disabled={loading || !token.trim() || !seedId.trim()} onClick={testStart}>
-          Проверить запуск
-        </button>
-      </p>
+      <div aria-live="polite">
+        {startError && (
+          <div className="error-banner" role="alert">
+            {startError}
+          </div>
+        )}
 
-      <p>Для теста выбрана GLiNER. Настоящий сбор на бэкенде пока не подключён.</p>
-
-      <pre>{result}</pre>
+        {started && (
+          <div className="success-banner">
+            <strong>Задание принято бэкендом</strong>
+            <p>Идентификатор: {started.collection_id}</p>
+            <p>
+              Фоновый сбор и ML-обработка пока не подключены. Этот ответ подтверждает только
+              принятие задания.
+            </p>
+          </div>
+        )}
+      </div>
     </main>
   )
 }
