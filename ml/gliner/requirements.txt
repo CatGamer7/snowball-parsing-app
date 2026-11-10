@@ -1,5 +1,4 @@
 gliner
-torch
 transformers
 huggingface-hub
 sentencepiece
