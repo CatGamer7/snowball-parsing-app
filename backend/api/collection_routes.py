@@ -1,5 +1,4 @@
 import logging
-from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks
@@ -16,6 +15,7 @@ from api.schemas import (
 )
 from api.vk_routes import convert_vk_error, detect_token
 from core.models import Record
+from core.jobs import CollectionFailure, CollectionProgress, job_store
 from vk.client import VKAPIError, VKClient
 from vk.source import VKDataSource
 
@@ -119,18 +119,65 @@ async def load_seeds(
     return records
 
 
-async def collection_placeholder(
+async def run_collection(
     collection_id: str,
-    seed_count: int,
-    model_ids: list[str],
+    records: list[Record],
+    vk_requests_count: int,
 ) -> None:
-    logger.info(
-        "Заглушка сбора: id=%s | seeds=%s | models=%s. "
-        "Запрос принят; алгоритм сбора ещё не подключён.",
-        collection_id,
-        seed_count,
-        ", ".join(model_ids),
-    )
+    job_store.start(collection_id)
+
+    try:
+        job_store.update_counts(
+            collection_id,
+            records_count=sum(record.kind == "post" for record in records),
+            expansion_level=0,
+            selected_entities_count=0,
+            vk_requests_count=vk_requests_count,
+        )
+
+        # Первый этап SNO-22: ML и цикл расширения ещё не подключены.
+        job_store.finish(
+            collection_id,
+            error=CollectionFailure(
+                code="ML_NOT_AVAILABLE",
+                message="ML-модуль ещё не подключён. Расширение выборки не выполнялось.",
+            ),
+        )
+
+        logger.warning("Задание %s: ML-модуль не подключён", collection_id)
+
+    except Exception as exc:
+        job_store.finish(
+            collection_id,
+            error=CollectionFailure(
+                code="INTERNAL_ERROR",
+                message="Внутренняя ошибка фонового задания",
+            ),
+        )
+        logger.error(
+            "Ошибка фонового задания %s | %s",
+            collection_id,
+            type(exc).__name__,
+        )
+
+
+@router.get(
+    "/{collection_id}/progress",
+    response_model=CollectionProgress,
+    summary="Получить состояние и прогресс сбора",
+    responses={404: {"model": ErrorResponse, "description": "Задание не найдено"}},
+)
+def get_collection_progress(collection_id: str) -> CollectionProgress:
+    progress = job_store.get(collection_id)
+
+    if progress is None:
+        raise APIError(
+            status_code=404,
+            code="COLLECTION_NOT_FOUND",
+            message="Задание сбора не найдено",
+        )
+
+    return progress
 
 
 @router.post(
@@ -140,8 +187,9 @@ async def collection_placeholder(
     summary="Принять задание на сбор данных",
     description=(
         "Проверяет запрос, токен VK и начальные записи. "
-        "В текущей реализации фоновая задача является заглушкой: "
-        "сбор данных и запуск ML-моделей ещё не выполняются."
+        "Ответ running сохранён для совместимости и означает принятие задания. "
+        "Фактическое состояние доступно через эндпоинт прогресса. "
+        "Пока ML не подключён, задание завершается с ML_NOT_AVAILABLE."
     ),
     responses={
         401: {
@@ -190,6 +238,7 @@ async def start_collection(
 
             source = VKDataSource(client)
             records = await load_seeds(source, request)
+            vk_requests_count = client.requests_count
 
     except VKAPIError as exc:
         raise convert_vk_error(exc) from None
@@ -222,13 +271,13 @@ async def start_collection(
             message="Не удалось обработать ответ VK API",
         ) from None
 
-    collection_id = str(uuid4())
+    job = job_store.create(vk_requests_count=vk_requests_count)
 
     background_tasks.add_task(
-        collection_placeholder,
-        collection_id,
-        len(records),
-        list(request.rules.models),
+        run_collection,
+        job.collection_id,
+        records,
+        vk_requests_count,
     )
 
-    return StartResponse(collection_id=collection_id)
+    return StartResponse(collection_id=job.collection_id)

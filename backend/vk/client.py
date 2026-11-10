@@ -27,6 +27,7 @@ class VKClient:
         )
         self._lock = asyncio.Lock()
         self._last_call = 0.0
+        self.requests_count = 0
 
     async def call(self, method: str, **params) -> dict | list:
         params = {k: v for k, v in params.items() if v is not None}
@@ -39,6 +40,7 @@ class VKClient:
                 await asyncio.sleep(wait)
             self._last_call = time.monotonic()
 
+        self.requests_count += 1
         response = await self._http.post(method, data=params)
         response.raise_for_status()
         payload = response.json()

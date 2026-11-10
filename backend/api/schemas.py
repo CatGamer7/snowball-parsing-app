@@ -112,6 +112,7 @@ class ErrorDetail(APIModel):
         "INVALID_TOKEN",
         "UNSUPPORTED_TOKEN_TYPE",
         "MODEL_NOT_FOUND",
+        "COLLECTION_NOT_FOUND",
         "VALIDATION_ERROR",
         "VK_QUOTA_EXCEEDED",
         "VK_UNAVAILABLE",
