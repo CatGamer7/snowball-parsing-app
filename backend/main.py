@@ -1,10 +1,13 @@
 import logging
+import os
+from pathlib import Path
 import time
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.collection_routes import router as collection_router
 from api.errors import (
@@ -84,7 +87,10 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+def health(response: Response) -> dict[str, str]:
+    instance = os.environ.get("SNOWBALL_INSTANCE_ID")
+    if instance:
+        response.headers["X-Snowball-Instance"] = instance
     return {"status": "ok"}
 
 
@@ -94,6 +100,15 @@ def health() -> dict[str, str]:
 )
 def list_models() -> list[dict]:
     return MODELS
+
+
+# В установщике Electron открывает эту страницу: API и UI имеют один origin.
+ui_directory = os.environ.get("SNOWBALL_UI_DIR")
+if ui_directory:
+    directory = Path(ui_directory).resolve()
+    if not (directory / "index.html").is_file():
+        raise RuntimeError("Не найдены файлы интерфейса установленного приложения")
+    app.mount("/app", StaticFiles(directory=str(directory), html=True), name="desktop-ui")
 
 
 if __name__ == "__main__":
