@@ -33,15 +33,7 @@ export const MOCK = {
       settings_schema: { type: 'object', additionalProperties: false }
     }
   ],
-  collectionId: 'mock-collection-1',
-  // Точки статуса и результатов в контракте 0.2.0 ещё нет, путь /collection/<id> условный
-  result: {
-    status: 'finished',
-    items: [
-      { text: 'Студенты ТПУ провели форум в Москве.', depth: 0 },
-      { text: 'На форуме обсудили языковые модели.', depth: 1 }
-    ]
-  }
+  collectionId: 'mock-collection-1'
 }
 
 export interface RecordedRequest {
@@ -90,10 +82,6 @@ export async function mockBackend(context: BrowserContext): Promise<RecordedRequ
 
     if (method === 'POST' && path === '/collection/start') {
       return reply(route, 202, { collection_id: MOCK.collectionId, status: 'running' })
-    }
-
-    if (method === 'GET' && path === `/collection/${MOCK.collectionId}`) {
-      return reply(route, 200, MOCK.result)
     }
 
     return error(route, 404, 'NOT_MOCKED', `${method} ${path} нет в заглушке`)

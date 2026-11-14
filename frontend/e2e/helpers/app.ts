@@ -23,7 +23,9 @@ export async function launchApp(): Promise<RunningApp> {
   const app = await electron.launch({ args: ['.'], cwd: FRONTEND_DIR, env })
   const requests = await mockBackend(app.context())
 
+  // Окно могло запросить список моделей до установки заглушки — перезагружаем его
   const window = await app.firstWindow()
+  await window.reload()
   const errors: string[] = []
   window.on('pageerror', (error) => errors.push(error.message))
   window.on('console', (message) => {
