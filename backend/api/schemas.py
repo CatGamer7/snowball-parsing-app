@@ -95,6 +95,14 @@ class Rules(APIModel):
     models: dict[str, dict[str, Any]] = Field(min_length=1)
     threshold: float = Field(ge=0, le=1)
     max_depth: int = Field(default=2, ge=1, le=5)
+    sample_size: int = Field(
+        default=100, ge=1, le=1000,
+        description="Максимум постов в случайной выборке для NER на каждой волне.",
+    )
+    top_entities: int = Field(
+        default=5, ge=1, le=20,
+        description="Максимум новых сущностей для поисковых запросов на каждой волне.",
+    )
 
 
 class StartRequest(ValidateRequest):

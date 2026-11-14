@@ -1,7 +1,7 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Query
 from pydantic import ValidationError
 
 from api.errors import APIError
@@ -15,7 +15,8 @@ from api.schemas import (
 )
 from api.vk_routes import convert_vk_error, detect_token
 from core.models import Record
-from core.jobs import CollectionFailure, CollectionProgress, job_store
+from core.jobs import CollectionProgress, CollectionRecords, job_store
+from services.collection import run_collection
 from vk.client import VKAPIError, VKClient
 from vk.source import VKDataSource
 
@@ -119,48 +120,6 @@ async def load_seeds(
     return records
 
 
-async def run_collection(
-    collection_id: str,
-    records: list[Record],
-    vk_requests_count: int,
-) -> None:
-    job_store.start(collection_id)
-
-    try:
-        job_store.update_counts(
-            collection_id,
-            records_count=sum(record.kind == "post" for record in records),
-            expansion_level=0,
-            selected_entities_count=0,
-            vk_requests_count=vk_requests_count,
-        )
-
-        # Первый этап SNO-22: ML и цикл расширения ещё не подключены.
-        job_store.finish(
-            collection_id,
-            error=CollectionFailure(
-                code="ML_NOT_AVAILABLE",
-                message="ML-модуль ещё не подключён. Расширение выборки не выполнялось.",
-            ),
-        )
-
-        logger.warning("Задание %s: ML-модуль не подключён", collection_id)
-
-    except Exception as exc:
-        job_store.finish(
-            collection_id,
-            error=CollectionFailure(
-                code="INTERNAL_ERROR",
-                message="Внутренняя ошибка фонового задания",
-            ),
-        )
-        logger.error(
-            "Ошибка фонового задания %s | %s",
-            collection_id,
-            type(exc).__name__,
-        )
-
-
 @router.get(
     "/{collection_id}/progress",
     response_model=CollectionProgress,
@@ -180,6 +139,26 @@ def get_collection_progress(collection_id: str) -> CollectionProgress:
     return progress
 
 
+@router.get(
+    "/{collection_id}/records",
+    response_model=CollectionRecords,
+    summary="Получить страницу собранных постов",
+    responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+)
+def get_collection_records(
+    collection_id: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> CollectionRecords:
+    page = job_store.get_records(collection_id, offset=offset, limit=limit)
+    if page is None:
+        raise APIError(404, "COLLECTION_NOT_FOUND", "Задание сбора не найдено")
+    total, items = page
+    return CollectionRecords(
+        collection_id=collection_id, total=total, offset=offset, limit=limit, items=items,
+    )
+
+
 @router.post(
     "/start",
     status_code=202,
@@ -189,7 +168,7 @@ def get_collection_progress(collection_id: str) -> CollectionProgress:
         "Проверяет запрос, токен VK и начальные записи. "
         "Ответ running сохранён для совместимости и означает принятие задания. "
         "Фактическое состояние доступно через эндпоинт прогресса. "
-        "Пока ML не подключён, задание завершается с ML_NOT_AVAILABLE."
+        "Сбор выполняется в фоне с GLiNER; ошибки выполнения доступны в прогрессе."
     ),
     responses={
         401: {
@@ -278,6 +257,7 @@ async def start_collection(
         job.collection_id,
         records,
         vk_requests_count,
+        request,
     )
 
     return StartResponse(collection_id=job.collection_id)
