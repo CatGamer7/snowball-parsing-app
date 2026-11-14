@@ -1,17 +1,15 @@
 # SNO-16: тест-кейсы для точек экрана ввода токена, начальных записей и метода сравнения
 
 Трассировка: [SNO-9 «OpenAPI-контракт точек»](https://ru.yougile.com/team/e38cdf3c8a7e/#SNO-9),
-файл [`openapi.yaml`](../../openapi.yaml), версия контракта **0.2.0**.
+файл [`openapi.yaml`](../../openapi.yaml), версия контракта **0.2.2**.
 В колонке «SNO-9» указано место в контракте, из которого следует ожидаемый результат.
 
-Бэкенд: `http://127.0.0.1:8000`. Все ошибки по контракту приходят в формате
-`{"error": {"code": "...", "message": "..."}}`. Проверяем `code` и HTTP-статус;
-`message` — текст для пользователя, его точную формулировку не сверяем.
+Бэкенд: `http://127.0.0.1:8000`. Для описанных в OpenAPI ошибок проверяем HTTP-статус и поле `error.code`.
+Поле `error.message` содержит текст для пользователя, точная формулировка может отличаться.
 
-Колонка «Прогон» — результат проверки на ветке `feature/SNO-10-api-endpoints` (30.10):
-«Пройден» — соответствует контракту; «Не пройден» — не соответствует;
-«Нет реализации» — точки ещё нет в коде; «Не проверялся» — нужен настоящий токен VK
-или подмена ответов VK.
+Колонка «Прогон» отражает ручную проверку на версии 0.2.2 от 14.11.2026.
+«Пройден» означает, что наблюдаемый ответ соответствует ожидаемому. «Не проверялся»
+означает, что этот кейс не запускали на текущей версии.
 
 ## POST /vk/validate — проверка токена
 
@@ -22,12 +20,12 @@
 | VAL-03 | Негативный   | Ключ сообщества                | `{"token": "<ключ сообщества>"}`                      | 403, `UNSUPPORTED_TOKEN_TYPE`                                               | `responses.403`                                    | Не проверялся |
 | VAL-04 | Негативный   | Несуществующий токен           | `{"token": "vk1.a.wrong"}`                            | 401, `INVALID_TOKEN`                                                        | `responses.401`                                    | Не проверялся |
 | VAL-05 | Негативный   | Отозванный токен               | отозванный ключ                                       | 401, `INVALID_TOKEN`                                                        | `responses.401`                                    | Не проверялся |
-| VAL-06 | Негативный   | Пустая строка                  | `{"token": ""}`                                       | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`minLength: 1`)           | Пройден       |
-| VAL-07 | Негативный   | Только пробелы                 | `{"token": "   "}`                                    | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`pattern: \S`)            | Пройден       |
+| VAL-06 | Негативный   | Пустая строка                  | `{"token": ""}`                                       | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`minLength: 1`)           | Не проверялся |
+| VAL-07 | Негативный   | Только пробелы                 | `{"token": "   "}`                                    | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`pattern: \S`)            | Не проверялся |
 | VAL-08 | Негативный   | Нет поля `token`               | `{}`                                                  | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.required`                         | Пройден       |
-| VAL-09 | Негативный   | Токен не строка                | `{"token": 123}`, `{"token": null}`                   | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`type: string`)           | Пройден       |
-| VAL-10 | Негативный   | Лишнее поле                    | `{"token": "x", "a": 1}`                              | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest` (`additionalProperties: false`)  | Пройден       |
-| VAL-11 | Негативный   | Тело не JSON                   | `abc`                                                 | 422, `VALIDATION_ERROR`                                                     | `responses.422`                                    | Пройден       |
+| VAL-09 | Негативный   | Токен не строка                | `{"token": 123}`, `{"token": null}`                   | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest.token` (`type: string`)           | Не проверялся |
+| VAL-10 | Негативный   | Лишнее поле                    | `{"token": "x", "a": 1}`                              | 422, `VALIDATION_ERROR`                                                     | `ValidateRequest` (`additionalProperties: false`)  | Не проверялся |
+| VAL-11 | Негативный   | Тело не JSON                   | `abc`                                                 | 422, `VALIDATION_ERROR`                                                     | `responses.422`                                    | Не проверялся |
 | VAL-12 | Негативный   | VK: превышен лимит             | VK отвечает ошибкой 6/29 или HTTP 429                 | 429, `VK_QUOTA_EXCEEDED`                                                    | `responses.429`                                    | Не проверялся |
 | VAL-13 | Негативный   | VK недоступен                  | нет сети / таймаут VK                                 | 502, `VK_UNAVAILABLE`                                                       | `responses.502`                                    | Не проверялся |
 | VAL-14 | Безопасность | Токен не попадает в логи       | VAL-01 и VAL-04, затем поиск токена в консоли бэкенда | Токена нет в логах                                                          | `ValidateRequest.token` («не записывается в логи») | Не проверялся |
@@ -42,9 +40,9 @@
 | MOD-03 | Позитивный | Поля модели                | то же                                                          | У каждой есть `id`, `name`, `description`, `task: "ner"`, `settings_schema`; лишних полей нет | `components.schemas.Model`                 | Не проверялся                                        |
 | MOD-04 | Позитивный | Настройки GLiNER           | то же                                                          | `settings_schema` требует `labels`: массив, ≥ 1 элемент, без повторов, строки не пустые       | `GLiNERSettings`                           | Не проверялся                                        |
 | MOD-05 | Позитивный | Настройки WikiNEuRal       | то же                                                          | `settings_schema` — объект без полей, `additionalProperties: false`                           | `WikiNeuralSettings`                       | Не проверялся                                        |
-| MOD-06 | Позитивный | Согласованность с запуском | id из ответа подставить в `rules.models` запроса STA-01/STA-03 | Сбор принимается (202)                                                                        | `SelectedModels`                           | Нет реализации                                       |
+| MOD-06 | Позитивный | Согласованность с запуском | id из ответа подставить в `rules.models` запроса STA-01/STA-03 | Запрос принят (202). Для WikiNEuRal проверяется поведение из STA-03. | `SelectedModels`                           | Не проверялся                                        |
 | MOD-07 | Позитивный | Работа без сети            | отключить интернет, `GET /collection/models`                   | 200, тот же список (VK не нужен)                                                              | `description` точки                        | Не проверялся                                        |
-| MOD-08 | Негативный | Неверный метод             | `POST /collection/models`                                      | 405 в формате `Error`                                                                         | `info.description` («единый формат Error») | Не пройден: ответ `{"detail": "Method Not Allowed"}` |
+| MOD-08 | Негативный | Неверный метод             | `POST /collection/models`                                      | 405 | Общая HTTP-проверка маршрутизации | Не проверялся                                        |
 
 ## POST /collection/start — запуск сбора
 
@@ -64,49 +62,48 @@
 
 | ID     | Тип          | Что проверяем                       | Изменение запроса                                                            | Ожидаемый результат                                         | SNO-9                                                               | Прогон         |
 | ------ | ------------ | ----------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- | -------------- |
-| STA-01 | Позитивный   | Только GLiNER                       | —                                                                            | 202, `collection_id` — непустая строка, `status: "running"` | `responses.202`, пример `gliner`                                    | Нет реализации |
-| STA-02 | Позитивный   | Обе модели                          | `models`: GLiNER + `"Babelscape/wikineural-multilingual-ner": {}`            | 202                                                         | пример `both`                                                       | Нет реализации |
-| STA-03 | Позитивный   | Только WikiNEuRal                   | `models`: `{"Babelscape/wikineural-multilingual-ner": {}}`                   | 202                                                         | пример `wikineural`                                                 | Нет реализации |
-| STA-04 | Позитивный   | Все типы начальных записей          | `seeds`: group (короткое имя), group (числовой id), user, post `-123456_789` | 202                                                         | `Seed`                                                              | Нет реализации |
-| STA-05 | Граничный    | Порог на границах                   | `threshold`: `0`, затем `1`                                                  | 202                                                         | `Rules.threshold` (0…1)                                             | Нет реализации |
-| STA-06 | Граничный    | Глубина на границах                 | `max_depth`: `1`, затем `5`                                                  | 202                                                         | `Rules.max_depth` (1…5)                                             | Нет реализации |
-| STA-07 | Позитивный   | Глубина по умолчанию                | без `max_depth`                                                              | 202 (используется 2)                                        | `Rules.max_depth.default`                                           | Нет реализации |
-| STA-08 | Позитивный   | Без предварительной проверки токена | сразу `start`, без `/vk/validate`                                            | 202                                                         | `StartRequest.token` («предварительный /vk/validate не обязателен») | Нет реализации |
-| STA-09 | Позитивный   | Разные сборы                        | два одинаковых запроса подряд                                                | оба 202, `collection_id` разные                             | `StartResponse.collection_id`                                       | Нет реализации |
-| STA-10 | Негативный   | Неверный токен                      | `token: "vk1.a.wrong"`                                                       | 401, `INVALID_TOKEN`                                        | `responses.401`                                                     | Нет реализации |
-| STA-11 | Негативный   | Ключ сообщества                     | ключ сообщества                                                              | 403, `UNSUPPORTED_TOKEN_TYPE`                               | `responses.403`                                                     | Нет реализации |
-| STA-12 | Негативный   | Неизвестная модель                  | `models`: `{"unknown/model": {}}`                                            | 404, `MODEL_NOT_FOUND`                                      | `responses.404`, `description` точки                                | Нет реализации |
-| STA-13 | Негативный   | Модели не выбраны                   | `models: {}`                                                                 | 422, `VALIDATION_ERROR`                                     | `SelectedModels` (`minProperties: 1`)                               | Нет реализации |
-| STA-14 | Негативный   | GLiNER без типов сущностей          | `labels` нет; `labels: []`                                                   | 422                                                         | `GLiNERSettings` (`required`, `minItems`)                           | Нет реализации |
-| STA-15 | Негативный   | Плохие `labels`                     | `["city", "city"]`; `["   "]`                                                | 422                                                         | `GLiNERSettings` (`uniqueItems`, `pattern`)                         | Нет реализации |
-| STA-16 | Негативный   | Настройки у WikiNEuRal              | `{"Babelscape/wikineural-multilingual-ner": {"labels": ["city"]}}`           | 422                                                         | `WikiNeuralSettings` (`additionalProperties: false`)                | Нет реализации |
-| STA-17 | Негативный   | Порог вне диапазона                 | `threshold`: `-0.01`; `1.01`; `"0.5"`; без поля                              | 422                                                         | `Rules.threshold`, `Rules.required`                                 | Нет реализации |
-| STA-18 | Негативный   | Глубина вне диапазона               | `max_depth`: `0`; `6`; `1.5`                                                 | 422                                                         | `Rules.max_depth`                                                   | Нет реализации |
-| STA-19 | Негативный   | Нет начальных записей               | `seeds: []`; без `seeds`                                                     | 422                                                         | `StartRequest.seeds` (`minItems: 1`)                                | Нет реализации |
-| STA-20 | Негативный   | Неверная начальная запись           | `type: "chat"`; `id: ""`; `id: "  "`; лишнее поле в seed                     | 422                                                         | `Seed`                                                              | Нет реализации |
-| STA-21 | Негативный   | Неверный формат id поста            | post `id`: `"123"`; `"abc_def"`                                              | 422                                                         | `Seed.id` (формат `{owner_id}_{post_id}`)                           | Нет реализации |
-| STA-22 | Негативный   | Недоступная начальная запись        | несуществующая или закрытая группа                                           | 422                                                         | `responses.422` («недоступная начальная запись»)                    | Нет реализации |
-| STA-23 | Негативный   | Старый формат 0.1.0                 | `rules.model_id` вместо `rules.models`                                       | 422                                                         | `info.description` («0.2.0 несовместима с 0.1.0»)                   | Нет реализации |
-| STA-24 | Негативный   | Лишнее поле                         | `"extra": 1` в корне или в `rules`                                           | 422                                                         | `StartRequest`, `Rules` (`additionalProperties: false`)             | Нет реализации |
-| STA-25 | Негативный   | VK: лимит / недоступен              | VK отвечает 6/29 или нет сети                                                | 429 `VK_QUOTA_EXCEEDED` / 502 `VK_UNAVAILABLE`              | `responses.429`, `responses.502`                                    | Нет реализации |
-| STA-26 | Безопасность | Токен не в логах и не в ответе      | STA-01, STA-10                                                               | Токена нет в логах бэкенда и в ответах                      | `StartRequest.token` (`writeOnly`)                                  | Нет реализации |
+| STA-01 | Позитивный   | Только GLiNER                       | —                                                                            | 202, `collection_id` — непустая строка, `status: "running"` | `responses.202`, пример `gliner`                                    | Не проверялся  |
+| STA-02 | Позитивный   | Обе модели                          | GLiNER + `"Babelscape/wikineural-multilingual-ner": {}`. Использовать начальные данные с непустым текстом. | `202`. По полученному `collection_id` опрашивать `GET /collection/{collection_id}/progress` до завершения. Ожидать `status: "failed"` и `error.code: "ML_NOT_AVAILABLE"`. | `POST /collection/start`: описание, `responses.202`; `CollectionProgress`, `CollectionFailure` | Не проверялся  |
+| STA-03 | Позитивный   | Только WikiNEuRal                   | Только `"Babelscape/wikineural-multilingual-ner": {}`. Использовать начальные данные с непустым текстом. | `202`. По полученному `collection_id` опрашивать `GET /collection/{collection_id}/progress` до завершения. Ожидать `status: "failed"` и `error.code: "ML_NOT_AVAILABLE"`. | `POST /collection/start`: описание, `responses.202`; `CollectionProgress`, `CollectionFailure` | Не проверялся  |
+| STA-04 | Позитивный   | Все типы начальных записей          | `seeds`: group (короткое имя), group (числовой id), user, post `-123456_789` | 202                                                         | `Seed`                                                              | Не проверялся  |
+| STA-05 | Граничный    | Порог на границах                   | `threshold`: `0`, затем `1`                                                  | 202                                                         | `Rules.threshold` (0…1)                                             | Не проверялся  |
+| STA-06 | Граничный    | Глубина на границах                 | `max_depth`: `1`, затем `5`                                                  | 202                                                         | `Rules.max_depth` (1…5)                                             | Не проверялся  |
+| STA-07 | Позитивный   | Глубина по умолчанию                | без `max_depth`                                                              | 202 (используется 2)                                        | `Rules.max_depth.default`                                           | Не проверялся  |
+| STA-08 | Позитивный   | Без предварительной проверки токена | сразу `start`, без `/vk/validate`                                            | 202                                                         | `StartRequest.token` («предварительный /vk/validate не обязателен») | Не проверялся  |
+| STA-09 | Позитивный   | Разные сборы                        | два одинаковых запроса подряд                                                | оба 202, `collection_id` разные                             | `StartResponse.collection_id`                                       | Не проверялся  |
+| STA-10 | Негативный   | Неверный токен                      | `token: "vk1.a.wrong"`                                                       | 401, `INVALID_TOKEN`                                        | `responses.401`                                                     | Не проверялся  |
+| STA-11 | Негативный   | Ключ сообщества                     | ключ сообщества                                                              | 403, `UNSUPPORTED_TOKEN_TYPE`                               | `responses.403`                                                     | Не проверялся  |
+| STA-12 | Негативный   | Неизвестная модель                  | `models`: `{"unknown/model": {}}`                                            | 404, `MODEL_NOT_FOUND`                                      | `responses.404`, `description` точки                                | Не проверялся  |
+| STA-13 | Негативный   | Модели не выбраны                   | `models: {}`                                                                 | 422, `VALIDATION_ERROR`                                     | `SelectedModels` (`minProperties: 1`)                               | Не проверялся  |
+| STA-14 | Негативный   | GLiNER без типов сущностей          | `labels` нет; `labels: []`                                                   | 422                                                         | `GLiNERSettings` (`required`, `minItems`)                           | Не проверялся  |
+| STA-15 | Негативный   | Плохие `labels`                     | `["city", "city"]`; `["   "]`                                                | 422                                                         | `GLiNERSettings` (`uniqueItems`, `pattern`)                         | Не проверялся  |
+| STA-16 | Негативный   | Настройки у WikiNEuRal              | `{"Babelscape/wikineural-multilingual-ner": {"labels": ["city"]}}`           | 422                                                         | `WikiNeuralSettings` (`additionalProperties: false`)                | Не проверялся  |
+| STA-17 | Негативный   | Порог вне диапазона                 | `threshold`: `-0.01`; `1.01`; `"0.5"`; без поля                              | 422                                                         | `Rules.threshold`, `Rules.required`                                 | Не проверялся  |
+| STA-18 | Негативный   | Глубина вне диапазона               | `max_depth`: `0`; `6`; `1.5`                                                 | 422                                                         | `Rules.max_depth`                                                   | Не проверялся  |
+| STA-19 | Негативный   | Нет начальных записей               | `seeds: []`; без `seeds` (остальные поля как в базовом запросе)                                                     | 422                                                         | `StartRequest.seeds` (`minItems: 1`)                                | Не проверялся  |
+| STA-20 | Негативный   | Неверная начальная запись           | `type: "chat"`; `id: ""`; `id: "  "`; лишнее поле в seed                     | 422                                                         | `Seed`                                                              | Не проверялся  |
+| STA-21 | Негативный   | Неверный формат id поста            | post `id`: `"123"`; `"abc_def"`                                              | 422                                                         | `Seed.id` (формат `{owner_id}_{post_id}`)                           | Не проверялся  |
+| STA-22 | Негативный   | Недоступная начальная запись        | несуществующая или закрытая группа                                           | 422                                                         | `responses.422` («недоступная начальная запись»)                    | Не проверялся  |
+| STA-23 | Негативный   | Старый формат 0.1.0                 | `rules.model_id` вместо `rules.models`                                       | 422                                                         | `Rules.required`, `Rules.additionalProperties` | Не проверялся  |
+| STA-24 | Негативный   | Лишнее поле                         | `"extra": 1` в корне или в `rules`                                           | 422                                                         | `StartRequest`, `Rules` (`additionalProperties: false`)             | Не проверялся  |
+| STA-25 | Негативный   | VK: лимит / недоступен              | VK отвечает 6/29 или нет сети                                                | 429 `VK_QUOTA_EXCEEDED` / 502 `VK_UNAVAILABLE`              | `responses.429`, `responses.502`                                    | Не проверялся  |
+| STA-26 | Безопасность | Токен не в логах и не в ответе      | STA-01, STA-10                                                               | Токена нет в логах бэкенда и в ответах                      | `StartRequest.token` (`writeOnly`)                                  | Не проверялся  |
+| STA-27 | Негативный | Пустой JSON-объект | Отправить `{}` вместо базового запроса | 422, `VALIDATION_ERROR` | `StartRequest.required`, `responses.422` | Пройден |
+| STA-28 | Граничный | Размер выборки NER | `sample_size`: `1`, `1000`, затем `0` и `1001` | Для 1 и 1000 — 202; для 0 и 1001 — 422, `VALIDATION_ERROR` | `Rules.sample_size` | Не проверялся |
+| STA-29 | Граничный | Число сущностей для поиска | `top_entities`: `1`, `20`, затем `0` и `21` | Для 1 и 20 — 202; для 0 и 21 — 422, `VALIDATION_ERROR` | `Rules.top_entities` | Не проверялся |
 
 ## Общие
 
 | ID     | Тип        | Что проверяем          | Запрос             | Ожидаемый результат   | SNO-9                                      | Прогон                                               |
 | ------ | ---------- | ---------------------- | ------------------ | --------------------- | ------------------------------------------ | ---------------------------------------------------- |
-| GEN-01 | Негативный | Несуществующий адрес   | `GET /no-such`     | 404 в формате `Error` | `info.description` («единый формат Error») | Не пройден: ответ `{"detail": "Not Found"}`          |
-| GEN-02 | Негативный | Неверный метод у точек | `GET /vk/validate` | 405 в формате `Error` | то же                                      | Не пройден: ответ `{"detail": "Method Not Allowed"}` |
+| GEN-01 | Негативный | Несуществующий адрес   | `GET /no-such`     | 404 | Общая HTTP-проверка маршрутизации | Не проверялся                                        |
+| GEN-02 | Негативный | Неверный метод у точек | `GET /vk/validate` | 405 | Общая HTTP-проверка маршрутизации | Не проверялся                                        |
 
-## Найдено при составлении
+## Примечания к контракту
 
-1. **404/405 приходят не в формате `Error`** (GEN-01, GEN-02, MOD-08). Обработчики ошибок в SNO-10
-   не перехватывают стандартные ошибки FastAPI. Нужно либо добавить обработчик, либо уточнить в контракте,
-   что единый формат только у описанных ответов. Кодов для 404/405 в перечне `Error.code` тоже нет.
-2. **`POST /collection/start` ещё не реализован** — кейсы STA и MOD-06 выполнить пока нельзя.
-3. **Порядок проверок у STA-12.** `SelectedModels` запрещает неизвестные ключи (`additionalProperties: false`),
-   то есть по схеме это 422, а в описании точки — 404 `MODEL_NOT_FOUND`. Ожидаем 404, как в описании;
-   бэкенду нужно проверять имя модели до общей проверки схемы.
-4. **Нет точки статуса и результатов сбора** («описывается отдельно»). Без неё нельзя проверить,
-   что сбор после 202 действительно идёт и чем заканчивается.
-5. **Смысл `threshold` ждёт подтверждения ML** — кейсы проверяют только диапазон 0…1.
+- `202` и `status: "running"` подтверждают принятие задания. Прогресс и ошибки доступны
+  в `GET /collection/{collection_id}/progress`, собранные записи — в
+  `GET /collection/{collection_id}/records`.
+- Для STA-12 описание `POST /collection/start` задаёт `404 MODEL_NOT_FOUND` при неизвестном
+  имени модели. При этом `SelectedModels.additionalProperties: false` запрещает неизвестные
+  ключи на уровне схемы. В кейсе указан ожидаемый HTTP-ответ из описания точки.
