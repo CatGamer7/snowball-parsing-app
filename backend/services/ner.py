@@ -1,8 +1,10 @@
 """Прямой вызов прототипа SNO-14 без временных request/output JSON."""
 import importlib.util
 import logging
-from pathlib import Path
+import os
 from threading import Lock
+
+from runtime import configure_packaged_environment, ml_module_path
 
 
 GLINER_ID = "urchade/gliner_multi-v2.1"
@@ -37,7 +39,8 @@ class GLiNERExtractor:
     def _load_module(self):
         if self._module is not None:
             return
-        path = Path(__file__).resolve().parents[2] / "ml/gliner/gliner_inference.py"
+        configure_packaged_environment()
+        path = ml_module_path()
         if not path.is_file():
             raise MLNotAvailable("Не найден ml/gliner/gliner_inference.py из ветки SNO-14.")
         spec = importlib.util.spec_from_file_location("snowball_sno14_gliner", path)
@@ -45,6 +48,8 @@ class GLiNERExtractor:
         try:
             spec.loader.exec_module(module)
         except ImportError:
+            if os.environ.get("SNOWBALL_BUILD_CHECK") == "1":
+                raise
             raise MLNotAvailable(
                 "Не удалось импортировать ML-модуль. "
                 "Проверьте зависимости ml/gliner/requirements.txt в окружении бэкенда."
@@ -55,7 +60,10 @@ class GLiNERExtractor:
         if self._model is not None:
             return
         module = self._module
-        self._device = "cuda" if module.torch.cuda.is_available() else "cpu"
+        self._device = (
+            "cuda" if os.environ.get("SNOWBALL_DEVICE") != "cpu"
+            and module.torch.cuda.is_available() else "cpu"
+        )
         try:
             self._model = module.load_model(self._device)
         except Exception:
@@ -86,6 +94,8 @@ class GLiNERExtractor:
             except MLNotAvailable:
                 raise
             except Exception as exc:
+                if os.environ.get("SNOWBALL_BUILD_CHECK") == "1":
+                    raise
                 # Не отдаём клиенту текст поста, локальные пути или детали библиотек.
                 logger.error("Ошибка GLiNER | %s", type(exc).__name__)
                 raise MLInferenceError(

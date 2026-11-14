@@ -1,39 +1,41 @@
 appId: ru.tpu.snowball
 productName: Snowball
 directories:
-  buildResources: build 
-  output: dist 
+  buildResources: build
+  output: dist
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!docs/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**/*
+  - package.json
+  - '!**/.env*'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: ../packaging/backend/snowball-backend
+    to: backend
+    filter:
+      - '**/*'
+  - from: ../packaging/models
+    to: models
+    filter:
+      - '**/*'
+  - from: out/renderer
+    to: ui
+    filter:
+      - '**/*'
 win:
   executableName: snowball
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: SnowBall-${version}-${arch}-setup.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  perMachine: false
+  shortcutName: Snowball
+  uninstallDisplayName: Snowball
   createDesktopShortcut: always
-mac:
-  entitlementsInherit: build/entitlements.mac.plist
-  notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
-linux:
-  target:
-    - AppImage
-  maintainer: snowball-team
-  category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
+  runAfterFinish: false
+compression: normal
 npmRebuild: false
