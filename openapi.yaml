@@ -1,25 +1,8 @@
-# SnowBall API 0.2.0
-# Проект обновления SNO-9. Семантика threshold и правило отбора требуют подтверждения ML.
 openapi: 3.1.0
 info:
   title: snowball-parsing-app API
-  version: 0.2.0
-  description: 'Локальный API настольного приложения SnowBall. Бэкенд слушает только 127.0.0.1.
-
-    Контракт описывает проверку VK-токена, каталог моделей и принятие задания на сбор.
-
-    Можно выбрать одну или обе NER-модели. Настройки передаются отдельно для каждой модели.
-
-    GLiNER показывается первым как основной вариант; это не означает автоматическое переключение между моделями.
-
-    Ошибки HTTP возвращаются в едином формате Error.
-
-    Версия 0.2.0 несовместима с 0.1.0: rules.model_id заменён на rules.models.
-
-    Правило отбора записей и использования сущностей для следующей волны требует отдельного согласования с
-    ML;
-
-    сам факт выбора NER-моделей этого правила не определяет.'
+  version: 0.2.2
+  description:
 servers:
 - url: http://127.0.0.1:8000
   description: Локальный бэкенд (порт задаётся переменной SNOWBALL_PORT)
@@ -127,7 +110,7 @@ paths:
                 name: GLiNER multi v2.1
                 description: Извлечение сущностей с заданными пользователем типами. Основной вариант.
                 task: ner
-                settings_schema: &id003
+                settings_schema: &id002
                   type: object
                   additionalProperties: false
                   required:
@@ -137,7 +120,7 @@ paths:
                       type: array
                       minItems: 1
                       uniqueItems: true
-                      items: &id002
+                      items: &id001
                         type: string
                         minLength: 1
                         pattern: \S
@@ -146,7 +129,7 @@ paths:
                 name: WikiNEuRal multilingual NER
                 description: Дополнительная NER-модель. В этой версии пользовательские настройки не предусмотрены.
                 task: ner
-                settings_schema: &id004
+                settings_schema: &id003
                   type: object
                   additionalProperties: false
         '500':
@@ -156,22 +139,14 @@ paths:
       tags:
       - collection
       summary: Запустить сбор данных
-      description: 'Проверяет структуру запроса, VK-токен и доступность начальных записей, затем принимает
-        задание на фоновый сбор.
-
-        Возвращает 202 и collection_id, когда фоновое задание зарегистрировано. Это не подтверждение успешного
-        завершения сбора или загрузки ML-моделей.
-
-        Для GLiNER требуется непустой labels; для WikiNEuRal передаётся {}.
-
-        Неизвестное имя модели возвращает 404 MODEL_NOT_FOUND; неверные настройки известной модели — 422 VALIDATION_ERROR.
-
-        Получение статуса и результатов описывается отдельно. Поддержка нескольких моделей не задаёт способ
-        объединения их результатов.
-
-        Результаты каждой ML-модели и её ошибки обрабатываются отдельно, как в согласованной схеме ML.
-
-        Этот HTTP-ответ содержит только данные о запуске; ML results в StartResponse не возвращаются.'
+      description: Проверяет запрос, токен и начальные записи VK, затем запускает фоновый сбор. Ответ
+        202 со status=running означает принятие задания; фактическое состояние доступно в progress. Подключена
+        только основная модель GLiNER из SNO-14. Выбор WikiNeural (в том числе вместе с GLiNER) приводит
+        к failed / ML_NOT_AVAILABLE на этапе расширения; модель не игнорируется. Из каждой начальной стены
+        берётся до 100 последних записей, из каждого поискового запроса — до 20. Уникальные непустые посты
+        сохраняются, сущности ранжируются по числу постов в выборке; каждый нормализованный запрос используется
+        один раз. Лимит задания — 5000 постов. Для NER используются первые 4000 символов текста. Ошибки
+        ML/VK доступны в progress.
       operationId: startCollection
       requestBody:
         required: true
@@ -184,7 +159,7 @@ paths:
                 summary: Только основная модель GLiNER
                 value:
                   token: VK_TOKEN_PLACEHOLDER
-                  seeds: &id001
+                  seeds:
                   - type: group
                     id: tpu_official
                   - type: post
@@ -198,30 +173,8 @@ paths:
                         - city
                     threshold: 0.5
                     max_depth: 2
-              both:
-                summary: Обе модели независимо
-                value:
-                  token: VK_TOKEN_PLACEHOLDER
-                  seeds: *id001
-                  rules:
-                    models:
-                      urchade/gliner_multi-v2.1:
-                        labels:
-                        - organization
-                        - city
-                      Babelscape/wikineural-multilingual-ner: {}
-                    threshold: 0.5
-                    max_depth: 2
-              wikineural:
-                summary: Только WikiNEuRal
-                value:
-                  token: VK_TOKEN_PLACEHOLDER
-                  seeds: *id001
-                  rules:
-                    models:
-                      Babelscape/wikineural-multilingual-ner: {}
-                    threshold: 0.5
-                    max_depth: 2
+                    sample_size: 100
+                    top_entities: 5
       responses:
         '202':
           description: Сбор принят и запущен
@@ -246,6 +199,99 @@ paths:
           $ref: '#/components/responses/VkUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /collection/{collection_id}/progress:
+    get:
+      tags:
+      - collection
+      summary: Получить состояние и прогресс сбора
+      operationId: get_collection_progress_collection__collection_id__progress_get
+      parameters:
+      - name: collection_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Collection Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionProgress'
+              example:
+                collection_id: example-id
+                status: completed
+                started_at: '2026-11-14T08:00:00Z'
+                finished_at: '2026-11-14T08:00:20Z'
+                records_count: 32
+                expansion_level: 1
+                selected_entities_count: 3
+                vk_requests_count: 7
+                error: null
+                stop_reason: max_depth
+        '404':
+          description: Задание не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: Состояние задания в памяти одного процесса до перезапуска. Уровень — число выполненных
+        раундов, начальная выборка = 0. selected_entities_count относится к последней попытке расширения.
+        Время в UTC; started_at — начало фонового этапа после проверки токена и seeds. Завершение раньше
+        max_depth нормально при отсутствии новых сущностей или постов. stop_reason объясняет успешную
+        остановку; error — сбой. Не запускать с несколькими workers.
+  /collection/{collection_id}/records:
+    get:
+      tags:
+      - collection
+      summary: Получить страницу собранных постов
+      operationId: getCollectionRecords
+      parameters:
+      - name: collection_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Collection Id
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionRecords'
+        '404':
+          description: Задание не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Некорректная пагинация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: Страница уже собранных уникальных постов, включая частичный результат running/failed.
+        Непустые тексты; максимум 100 на страницу. Данные теряются после перезапуска.
 components:
   schemas:
     ValidateRequest:
@@ -297,8 +343,8 @@ components:
       - task
       - settings_schema
       properties:
-        id: *id002
-        name: *id002
+        id: *id001
+        name: *id001
         description:
           type: string
         task:
@@ -307,8 +353,8 @@ components:
           - ner
         settings_schema:
           type: object
-          description: JSON Schema 2020-12 настроек модели. Фронтенд использует её для отображения полей и
-            проверки настроек.
+          description: JSON Schema 2020-12 настроек модели. Фронтенд использует её для отображения полей
+            и проверки настроек.
           additionalProperties: true
     Seed:
       type: object
@@ -347,15 +393,30 @@ components:
           type: number
           minimum: 0
           maximum: 1
-          description: 'Предлагаемая семантика для NER: минимальный score сущности, сохраняемой после обработки.
-            Не является мерой схожести текстов. Применяется к результатам каждой выбранной модели; сам по себе
-            не задаёт правило включения поста в выборку. Значение передаётся явно.'
+          description: 'Предлагаемая семантика для NER: минимальный score сущности, сохраняемой после
+            обработки. Не является мерой схожести текстов. Применяется к результатам каждой выбранной
+            модели; сам по себе не задаёт правило включения поста в выборку. Значение передаётся явно.'
         max_depth:
           type: integer
           minimum: 1
           maximum: 5
           default: 2
-          description: Максимальное число волн расширения после обработки начальных записей (волна 0).
+          description: Максимальное число раундов расширения после загрузки начальных постов. Возможна
+            досрочная остановка.
+        sample_size:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Sample Size
+          description: Максимум постов в случайной выборке для NER на каждой волне.
+          default: 100
+        top_entities:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Top Entities
+          description: Максимум новых сущностей для поисковых запросов на каждой волне.
+          default: 5
     StartRequest:
       type: object
       required:
@@ -368,7 +429,8 @@ components:
           minLength: 1
           pattern: \S
           writeOnly: true
-          description: Ключ VK. Повторно проверяется при запуске сбора; предварительный /vk/validate не обязателен.
+          description: Ключ VK. Повторно проверяется при запуске сбора; предварительный /vk/validate не
+            обязателен.
         seeds:
           type: array
           minItems: 1
@@ -413,22 +475,171 @@ components:
               - VK_QUOTA_EXCEEDED
               - VK_UNAVAILABLE
               - INTERNAL_ERROR
+              - COLLECTION_NOT_FOUND
             message:
               type: string
               description: Текст для пользователя
-    GLiNERSettings: *id003
-    WikiNeuralSettings: *id004
+    GLiNERSettings: *id002
+    WikiNeuralSettings: *id003
     SelectedModels:
       type: object
       minProperties: 1
       additionalProperties: false
-      description: Ключ — точное имя выбранной модели, значение — её настройки. Допускается одна или обе модели.
-        Пустой объект и неизвестные модели недопустимы.
+      description: Ключ — точное имя выбранной модели, значение — её настройки. Допускается одна или обе
+        модели. Пустой объект и неизвестные модели недопустимы.
       properties:
         urchade/gliner_multi-v2.1:
           $ref: '#/components/schemas/GLiNERSettings'
         Babelscape/wikineural-multilingual-ner:
           $ref: '#/components/schemas/WikiNeuralSettings'
+    CollectionProgress:
+      properties:
+        collection_id:
+          type: string
+          title: Collection Id
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - completed
+          - failed
+          title: Status
+        started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finished At
+        records_count:
+          type: integer
+          minimum: 0.0
+          title: Records Count
+          default: 0
+          description: Число уникальных постов с непустым текстом в памяти задания.
+        expansion_level:
+          type: integer
+          minimum: 0.0
+          title: Expansion Level
+          default: 0
+          description: Число выполненных раундов расширения; начальная выборка имеет уровень 0.
+        selected_entities_count:
+          type: integer
+          minimum: 0.0
+          title: Selected Entities Count
+          default: 0
+          description: Число новых сущностей, выбранных для последней попытки расширения; это не сумма
+            за все волны.
+        vk_requests_count:
+          type: integer
+          minimum: 0.0
+          title: Vk Requests Count
+          default: 0
+          description: 'Все HTTP-попытки VK для этого запуска: проверка токена, начальные записи, стены,
+            поиск, включая неудачные. Отдельный POST /vk/validate не включается.'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/CollectionFailure'
+          - type: 'null'
+        stop_reason:
+          anyOf:
+          - type: string
+            enum:
+            - max_depth
+            - no_text_records
+            - no_new_entities
+            - no_new_records
+            - record_limit
+          - type: 'null'
+          title: Stop Reason
+      type: object
+      required:
+      - collection_id
+      - status
+      title: CollectionProgress
+    CollectionFailure:
+      properties:
+        code:
+          type: string
+          enum:
+          - ML_NOT_AVAILABLE
+          - ML_ERROR
+          - VK_ERROR
+          - INTERNAL_ERROR
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: CollectionFailure
+    CollectionRecords:
+      properties:
+        collection_id:
+          type: string
+          title: Collection Id
+        total:
+          type: integer
+          title: Total
+        offset:
+          type: integer
+          title: Offset
+        limit:
+          type: integer
+          title: Limit
+        items:
+          items:
+            $ref: '#/components/schemas/VKPost'
+          type: array
+          title: Items
+      type: object
+      required:
+      - collection_id
+      - total
+      - offset
+      - limit
+      - items
+      title: CollectionRecords
+    VKPost:
+      properties:
+        source:
+          type: string
+          const: vk
+          title: Source
+          default: vk
+        kind:
+          type: string
+          const: post
+          title: Kind
+          default: post
+        id:
+          type: string
+          title: Id
+        owner_id:
+          type: integer
+          title: Owner Id
+        text:
+          type: string
+          title: Text
+        date:
+          type: integer
+          title: Date
+      type: object
+      required:
+      - id
+      - owner_id
+      - text
+      - date
+      title: VKPost
+      description: Пост на стене VK.
   responses:
     InvalidToken:
       description: Токен недействителен или истёк

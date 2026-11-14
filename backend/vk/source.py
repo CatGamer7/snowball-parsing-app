@@ -40,7 +40,18 @@ class VKDataSource(DataSource):
 
         raise ValueError(f"Неизвестный тип записи VK: {kind}")
 
+    async def get_wall_posts(self, owner_id: int, limit: int = 100) -> list[VKPost]:
+        """Последние записи стены; для MVP максимум одна страница (100 постов)."""
+        if not owner_id or not 1 <= limit <= 100:
+            raise ValueError("Некорректные параметры загрузки стены")
+        response = await self._client.call(
+            "wall.get", owner_id=owner_id, count=limit, offset=0, filter="all",
+        )
+        return [VKPost.from_api(item) for item in response["items"]]
+
     async def search(self, query: SearchQuery) -> list[Record]:
+        if query.kind not in {"post", "group", "user"} or query.limit < 1:
+            raise ValueError("Некорректный тип или лимит поискового запроса")
         if query.source != self.name:
             raise ValueError(f"Запрос адресован источнику {query.source}, а не {self.name}")
 
