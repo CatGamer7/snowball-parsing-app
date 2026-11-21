@@ -19,6 +19,7 @@ test('сбор от токена до запуска на mock-данных', as
   const startButton = page.getByRole('button', { name: 'Начать сбор' })
 
   await test.step('1. Токен: неверный отклоняется, верный проходит', async () => {
+    await expect(startButton).toBeDisabled()
     await page.getByLabel('Токен доступа').fill('vk1.a.wrong')
     await page.getByRole('button', { name: 'Проверить токен' }).click()
     await expect(page.getByText('Токен VK недействителен')).toBeVisible()
@@ -35,11 +36,20 @@ test('сбор от токена до запуска на mock-данных', as
     await expect(
       page.getByRole('list', { name: 'Добавленные записи' }).getByRole('listitem')
     ).toHaveCount(1)
+
+    await page.getByLabel('Ссылка или ID').fill('club1')
+    await page.getByRole('button', { name: 'Добавить', exact: true }).click()
+    await expect(page.getByText('Эта запись уже добавлена')).toBeVisible()
+    await expect(
+      page.getByRole('list', { name: 'Добавленные записи' }).getByRole('listitem')
+    ).toHaveCount(1)
   })
 
   await test.step('3. Модель, типы сущностей и порог', async () => {
     await page.getByRole('checkbox', { name: MOCK.models[0].name }).check()
     await page.getByLabel('Типы сущностей GLiNER').fill('city')
+    await page.getByLabel('Значение').fill('1.01')
+    await expect(startButton).toBeDisabled()
     await page.getByLabel('Значение').fill('0.8')
     await expect(startButton).toBeEnabled()
     await startButton.click()
@@ -63,5 +73,15 @@ test('сбор от токена до запуска на mock-данных', as
   await test.step('5. Показан mock-результат', async () => {
     await expect(page.getByText(`Идентификатор: ${MOCK.collectionId}`)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Задание принято' })).toBeDisabled()
+  })
+
+  await test.step('6. Изменённый токен требует повторной проверки', async () => {
+    await page.getByLabel('Токен доступа').fill('vk1.a.other-token')
+    await expect(page.getByText('Сервисный ключ проверен')).not.toBeVisible()
+    await expect(page.getByText('Задание принято бэкендом')).not.toBeVisible()
+    await expect(page.getByRole('button', { name: 'Начать сбор' })).toBeDisabled()
+    expect(
+      run.requests.filter((r) => r.method === 'POST' && r.path === '/collection/start')
+    ).toHaveLength(1)
   })
 })

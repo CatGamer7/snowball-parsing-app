@@ -1,7 +1,7 @@
 import type { BrowserContext, Route } from '@playwright/test'
 
-// Ответы бэкенда-заглушки по контракту openapi.yaml 0.2.0 (SNO-9).
-// При изменении контракта поправить только этот файл.
+// Используемые экраном ответы по контракту openapi.yaml 0.2.2 (SNO-9).
+// При изменении контракта сверить заглушку и проверки отправляемого запроса в сценарии.
 export const MOCK = {
   validToken: 'vk1.a.mock-valid-token',
   models: [
@@ -28,7 +28,8 @@ export const MOCK = {
       id: 'Babelscape/wikineural-multilingual-ner',
       name: 'WikiNEuRal multilingual NER',
       description:
-        'Дополнительная NER-модель. В этой версии пользовательские настройки не предусмотрены.',
+        'Дополнительная NER-модель. Пользовательские настройки не предусмотрены. ' +
+        'В текущем фоновом сборе эта модель ещё не подключена.',
       task: 'ner',
       settings_schema: { type: 'object', additionalProperties: false }
     }

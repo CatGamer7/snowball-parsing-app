@@ -17,21 +17,35 @@ export async function launchApp(): Promise<RunningApp> {
   // Playwright принимает только строковые значения, а в process.env бывают undefined.
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && key !== 'ELECTRON_RENDERER_URL') env[key] = value
+    if (
+      value !== undefined &&
+      !['ELECTRON_RENDERER_URL', 'ELECTRON_RUN_AS_NODE'].includes(key.toUpperCase())
+    ) {
+      env[key] = value
+    }
   }
 
   const app = await electron.launch({ args: ['.'], cwd: FRONTEND_DIR, env })
-  const requests = await mockBackend(app.context())
+  try {
+    const requests = await mockBackend(app.context())
+    const window = await app.firstWindow()
+    const errors: string[] = []
+    // Подписываемся до перезагрузки, чтобы не пропустить ошибки инициализации UI.
+    window.on('pageerror', (error) => errors.push(error.message))
+    window.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
 
-  // Окно могло запросить список моделей до установки заглушки — перезагружаем его
-  const window = await app.firstWindow()
-  await window.reload()
-  const errors: string[] = []
-  window.on('pageerror', (error) => errors.push(error.message))
-  window.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text())
-  })
-  await window.waitForLoadState('domcontentloaded')
-
-  return { app, window, requests, errors }
+    // Первая загрузка могла начаться до установки заглушки.
+    await window.reload({ waitUntil: 'domcontentloaded' })
+    return { app, window, requests, errors }
+  } catch (error) {
+    // beforeAll не вернёт RunningApp при ошибке настройки; закрываем процесс здесь.
+    try {
+      await app.close()
+    } catch {
+      // Процесс мог уже завершиться; сохраняем исходную ошибку настройки.
+    }
+    throw error
+  }
 }
