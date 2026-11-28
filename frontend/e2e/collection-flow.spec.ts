@@ -56,7 +56,7 @@ test('сбор от токена до запуска на mock-данных', as
   })
 
   await test.step('4. В бэкенд ушли введённые параметры', async () => {
-    await expect(page.getByText('Задание принято бэкендом')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Извлечение данных' })).toBeVisible()
 
     const start = run.requests.find((r) => r.method === 'POST' && r.path === '/collection/start')
     expect(start?.body).toEqual({
@@ -70,15 +70,21 @@ test('сбор от токена до запуска на mock-данных', as
     })
   })
 
-  await test.step('5. Показан mock-результат', async () => {
-    await expect(page.getByText(`Идентификатор: ${MOCK.collectionId}`)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Задание принято' })).toBeDisabled()
+  await test.step('5. Экран процесса показывает завершение и возвращает к настройкам', async () => {
+    await expect(page.getByRole('status')).toHaveText('Сбор завершён')
+    expect(run.requests.some((r) => r.path === `/collection/${MOCK.collectionId}/progress`)).toBe(
+      true
+    )
+    await page.getByRole('button', { name: 'К настройкам' }).click()
+    await expect(page.getByRole('heading', { name: 'Параметры сбора' })).toBeVisible()
+    await expect(page.getByLabel('Значение')).toHaveValue('0.8')
+    await expect(page.getByRole('button', { name: 'Начать сбор' })).toBeEnabled()
   })
 
   await test.step('6. Изменённый токен требует повторной проверки', async () => {
     await page.getByLabel('Токен доступа').fill('vk1.a.other-token')
     await expect(page.getByText('Сервисный ключ проверен')).not.toBeVisible()
-    await expect(page.getByText('Задание принято бэкендом')).not.toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Извлечение данных' })).not.toBeVisible()
     await expect(page.getByRole('button', { name: 'Начать сбор' })).toBeDisabled()
     expect(
       run.requests.filter((r) => r.method === 'POST' && r.path === '/collection/start')

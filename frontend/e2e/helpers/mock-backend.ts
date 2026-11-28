@@ -1,4 +1,5 @@
 import type { BrowserContext, Route } from '@playwright/test'
+import type { CollectionProgress } from '../../src/renderer/src/api/types'
 
 // Используемые экраном ответы по контракту openapi.yaml 0.2.2 (SNO-9).
 // При изменении контракта сверить заглушку и проверки отправляемого запроса в сценарии.
@@ -43,6 +44,32 @@ export interface RecordedRequest {
   body: unknown
 }
 
+export type ProgressReply = { status: number; json: unknown } | { abort: true }
+
+export interface MockBackendOptions {
+  progress?: (attempt: number) => ProgressReply | Promise<ProgressReply>
+}
+
+export function collectionProgress(
+  status: CollectionProgress['status'],
+  overrides: Partial<CollectionProgress> = {}
+): CollectionProgress {
+  const done = status === 'completed' || status === 'failed'
+  return {
+    collection_id: MOCK.collectionId,
+    status,
+    started_at: status === 'queued' ? null : '2026-11-28T10:00:00Z',
+    finished_at: done ? '2026-11-28T10:01:05Z' : null,
+    records_count: status === 'queued' ? 0 : status === 'completed' ? 79 : 59,
+    expansion_level: status === 'completed' ? 2 : 0,
+    selected_entities_count: status === 'completed' ? 1 : 0,
+    vk_requests_count: status === 'queued' ? 3 : status === 'completed' ? 5 : 4,
+    error: status === 'failed' ? { code: 'ML_NOT_AVAILABLE', message: 'Модель недоступна' } : null,
+    stop_reason: status === 'completed' ? 'max_depth' : null,
+    ...overrides
+  }
+}
+
 const BACKEND_URL = /^http:\/\/(127\.0\.0\.1|localhost):\d+\//
 
 // Окно открыто из file://, поэтому без CORS-заголовка fetch к бэкенду не пройдёт
@@ -56,10 +83,14 @@ function error(route: Route, status: number, code: string, message: string): Pro
   return reply(route, status, { error: { code, message } })
 }
 
-export async function mockBackend(context: BrowserContext): Promise<RecordedRequest[]> {
+export async function mockBackend(
+  context: BrowserContext,
+  options: MockBackendOptions = {}
+): Promise<RecordedRequest[]> {
   const requests: RecordedRequest[] = []
+  let progressRequests = 0
 
-  await context.route(BACKEND_URL, (route) => {
+  await context.route(BACKEND_URL, async (route) => {
     const request = route.request()
     const method = request.method()
     const path = new URL(request.url()).pathname
@@ -82,7 +113,16 @@ export async function mockBackend(context: BrowserContext): Promise<RecordedRequ
     }
 
     if (method === 'POST' && path === '/collection/start') {
+      progressRequests = 0
       return reply(route, 202, { collection_id: MOCK.collectionId, status: 'running' })
+    }
+
+    if (method === 'GET' && path === `/collection/${MOCK.collectionId}/progress`) {
+      const result = options.progress
+        ? await options.progress(progressRequests++)
+        : { status: 200, json: collectionProgress('completed') }
+      if ('abort' in result) return route.abort('failed')
+      return reply(route, result.status, result.json)
     }
 
     return error(route, 404, 'NOT_MOCKED', `${method} ${path} нет в заглушке`)

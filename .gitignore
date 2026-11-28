@@ -1,0 +1,8 @@
+/packaging/
+/backend/.venv-build/
+/frontend/dist/
+/frontend/node_modules/
+/.idea/
+__pycache__/
+*.pyc
+/ml/gliner/output.json

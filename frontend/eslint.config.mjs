@@ -28,5 +28,10 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
+  {
+    files: ['e2e/live/**/*.mjs'],
+    // Standalone Node.js entry points use JavaScript, which has no TS return annotations.
+    rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
+  }
 )

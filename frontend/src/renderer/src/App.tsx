@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getModels, startCollection } from './api'
 import type { Model, Seed, SelectedModels, StartResponse } from './api'
+import CollectionScreen from './components/CollectionScreen'
 import ModelsSection from './components/ModelsSection'
 import type { ModelSettings } from './components/ModelsSection'
 import SeedsSection from './components/SeedsSection'
@@ -171,6 +172,19 @@ function App(): React.JSX.Element {
     }
   }
 
+  if (started) {
+    return (
+      <CollectionScreen
+        key={started.collection_id}
+        collectionId={started.collection_id}
+        seedCount={seeds.length}
+        threshold={validateThreshold(settings.threshold)}
+        maxDepth={settings.maxDepth}
+        onBack={clearStartResult}
+      />
+    )
+  }
+
   return (
     <main className="settings-page">
       <h1>Параметры сбора</h1>
@@ -203,13 +217,13 @@ function App(): React.JSX.Element {
         <button
           className="button button-primary"
           type="button"
-          disabled={!canStart || started !== null}
+          disabled={!canStart}
           onClick={() => void handleStart()}
         >
-          {starting ? 'Отправляем задание…' : started ? 'Задание принято' : 'Начать сбор'}
+          {starting ? 'Отправляем задание…' : 'Начать сбор'}
         </button>
 
-        {!canStart && !starting && !started && (
+        {!canStart && !starting && (
           <p className="field-hint">
             Проверьте токен, добавьте начальные записи и заполните настройки моделей.
           </p>
@@ -220,17 +234,6 @@ function App(): React.JSX.Element {
         {startError && (
           <div className="error-banner" role="alert">
             {startError}
-          </div>
-        )}
-
-        {started && (
-          <div className="success-banner">
-            <strong>Задание принято бэкендом</strong>
-            <p>Идентификатор: {started.collection_id}</p>
-            <p>
-              Фоновый сбор и ML-обработка пока не подключены. Этот ответ подтверждает только
-              принятие задания.
-            </p>
           </div>
         )}
       </div>
