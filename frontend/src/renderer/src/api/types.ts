@@ -65,6 +65,7 @@ export type ApiErrorCode =
   | 'INVALID_TOKEN'
   | 'UNSUPPORTED_TOKEN_TYPE'
   | 'MODEL_NOT_FOUND'
+  | 'COLLECTION_NOT_FOUND'
   | 'VALIDATION_ERROR'
   | 'VK_QUOTA_EXCEEDED'
   | 'VK_UNAVAILABLE'
@@ -75,4 +76,21 @@ export interface ErrorResponse {
     code: ApiErrorCode
     message: string
   }
+}
+
+export interface CollectionProgress {
+  collection_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  started_at: string | null
+  finished_at: string | null
+  records_count: number
+  expansion_level: number
+  selected_entities_count: number
+  vk_requests_count: number
+  error: {
+    code: 'ML_NOT_AVAILABLE' | 'ML_ERROR' | 'VK_ERROR' | 'INTERNAL_ERROR'
+    message: string
+  } | null
+  stop_reason:
+    'max_depth' | 'no_text_records' | 'no_new_entities' | 'no_new_records' | 'record_limit' | null
 }
