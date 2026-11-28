@@ -8,3 +8,5 @@ export {
 export { ApiError } from './errors'
 export type { ApiErrorKind } from './errors'
 export type * from './types'
+
+export { getCollectionRecords } from './client'

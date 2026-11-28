@@ -1,0 +1,100 @@
+.export-page > .collection-step {
+  margin-bottom: 18px;
+}
+
+.export-page .export-card {
+  margin-bottom: 16px;
+}
+
+.export-card > h2 {
+  margin-bottom: 12px;
+}
+
+.export-card .collection-heading {
+  margin-bottom: 12px;
+}
+
+.export-metrics {
+  margin: 0;
+}
+
+.export-options,
+.export-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+
+.export-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.export-options input {
+  accent-color: #2453a6;
+}
+
+.export-folder {
+  overflow-wrap: anywhere;
+}
+
+.export-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  text-align: left;
+}
+
+.export-table th {
+  color: #2453a6;
+  background: #f2f5f9;
+}
+
+.export-table th,
+.export-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #e5eaf2;
+}
+
+.export-table th:nth-child(2) {
+  width: 29%;
+}
+
+.export-table a {
+  color: #2453a6;
+  overflow-wrap: anywhere;
+}
+
+.export-preview-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-full-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.export-pagination {
+  margin-top: 14px;
+}
+
+.export-empty {
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.export-success {
+  margin: 0 0 16px;
+}
+
+@media (max-width: 680px) {
+  .export-options,
+  .export-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

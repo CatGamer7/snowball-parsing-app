@@ -1,8 +1,12 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import type { ExportApi } from '../shared/export'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
-const api = {}
+const api: ExportApi = {
+  saveCsv: (filename, contents) => ipcRenderer.invoke('export:save-csv', filename, contents),
+  openExportFolder: () => ipcRenderer.invoke('export:open-folder')
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise

@@ -94,3 +94,20 @@ export interface CollectionProgress {
   stop_reason:
     'max_depth' | 'no_text_records' | 'no_new_entities' | 'no_new_records' | 'record_limit' | null
 }
+
+export interface CollectionRecord {
+  source: 'vk'
+  kind: 'post'
+  id: string
+  owner_id: number
+  text: string
+  date: number
+}
+
+export interface CollectionRecords {
+  collection_id: string
+  total: number
+  offset: number
+  limit: number
+  items: CollectionRecord[]
+}

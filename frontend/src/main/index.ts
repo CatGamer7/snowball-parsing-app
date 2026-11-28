@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { BackendProcess } from './backend'
+import { registerExportHandlers } from './export'
 import icon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | undefined
@@ -19,7 +20,9 @@ async function createWindow(): Promise<void> {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
   })
   mainWindow.on('ready-to-show', () => mainWindow?.show())
-  mainWindow.on('closed', () => { mainWindow = undefined })
+  mainWindow.on('closed', () => {
+    mainWindow = undefined
+  })
   mainWindow.webContents.setWindowOpenHandler((details) => {
     if (/^https?:\/\//i.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
@@ -44,6 +47,7 @@ if (!app.requestSingleInstanceLock()) {
     electronApp.setAppUserModelId('ru.tpu.snowball')
     app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
     ipcMain.on('ping', () => console.log('pong'))
+    registerExportHandlers(() => mainWindow)
     backend = new BackendProcess((message) => {
       if (!quitting) {
         dialog.showErrorBox('SnowBall', `${message}\nЖурнал: ${backend?.logPath}`)

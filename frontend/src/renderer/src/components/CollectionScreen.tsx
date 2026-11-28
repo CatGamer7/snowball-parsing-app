@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getCollectionProgress } from '../api'
 import type { CollectionProgress } from '../api'
+import ExportScreen from './ExportScreen'
 import './collection.css'
 
 interface CollectionScreenProps {
@@ -43,6 +44,7 @@ export default function CollectionScreen({
   maxDepth,
   onBack
 }: CollectionScreenProps): React.JSX.Element {
+  const [showExport, setShowExport] = useState(false)
   const [progress, setProgress] = useState<CollectionProgress | null>(null)
   const [requestError, setRequestError] = useState('')
   const [notFound, setNotFound] = useState(false)
@@ -96,6 +98,19 @@ export default function CollectionScreen({
     ['Запросов к VK API', progress?.vk_requests_count],
     ['Начальных записей', seedCount]
   ] as const
+
+  if (showExport && progress?.status === 'completed') {
+    return (
+      <ExportScreen
+        progress={progress}
+        seedCount={seedCount}
+        maxDepth={maxDepth}
+        duration={formatTime(progress.started_at, progress.finished_at, now)}
+        onBack={() => setShowExport(false)}
+        onNewCollection={onBack}
+      />
+    )
+  }
 
   return (
     <main className="settings-page collection-page">
@@ -163,6 +178,15 @@ export default function CollectionScreen({
         )}
 
         <div className="collection-actions">
+          {status === 'completed' && (
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => setShowExport(true)}
+            >
+              Экспорт результатов
+            </button>
+          )}
           {requestError && !notFound && (
             <button
               className="button button-primary"
