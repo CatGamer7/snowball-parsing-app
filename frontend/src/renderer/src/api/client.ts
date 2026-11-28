@@ -3,6 +3,7 @@ import { ApiError } from './errors'
 import type {
   ApiErrorCode,
   CollectionProgress,
+  CollectionRecords,
   HealthResponse,
   Model,
   StartRequest,
@@ -221,6 +222,42 @@ export function getCollectionProgress(
     200,
     (value): value is CollectionProgress =>
       isCollectionProgress(value) && value.collection_id === collectionId,
+    undefined,
+    signal
+  )
+}
+
+export function getCollectionRecords(
+  collectionId: string,
+  offset: number,
+  limit: number,
+  signal?: AbortSignal
+): Promise<CollectionRecords> {
+  return request(
+    `/collection/${encodeURIComponent(collectionId)}/records?offset=${offset}&limit=${limit}`,
+    'GET',
+    200,
+    (value): value is CollectionRecords =>
+      isObject(value) &&
+      value.collection_id === collectionId &&
+      value.offset === offset &&
+      value.limit === limit &&
+      typeof value.total === 'number' &&
+      Number.isSafeInteger(value.total) &&
+      value.total >= 0 &&
+      Array.isArray(value.items) &&
+      value.items.length === Math.min(limit, Math.max(0, value.total - offset)) &&
+      value.items.every(
+        (item: unknown) =>
+          isObject(item) &&
+          item.source === 'vk' &&
+          item.kind === 'post' &&
+          typeof item.id === 'string' &&
+          /^-?[1-9]\d*_[1-9]\d*$/.test(item.id) &&
+          typeof item.text === 'string' &&
+          Number.isSafeInteger(item.owner_id) &&
+          Number.isSafeInteger(item.date)
+      ),
     undefined,
     signal
   )
