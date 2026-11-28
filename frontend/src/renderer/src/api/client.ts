@@ -2,6 +2,7 @@ import { API_BASE_URL, API_TIMEOUT_MS } from './config'
 import { ApiError } from './errors'
 import type {
   ApiErrorCode,
+  CollectionProgress,
   HealthResponse,
   Model,
   StartRequest,
@@ -22,6 +23,7 @@ const ERROR_CODES: ApiErrorCode[] = [
   'INVALID_TOKEN',
   'UNSUPPORTED_TOKEN_TYPE',
   'MODEL_NOT_FOUND',
+  'COLLECTION_NOT_FOUND',
   'VALIDATION_ERROR',
   'VK_QUOTA_EXCEEDED',
   'VK_UNAVAILABLE',
@@ -69,12 +71,52 @@ function isStartResponse(value: unknown): value is StartResponse {
   return isObject(value) && isNonBlank(value.collection_id) && value.status === 'running'
 }
 
+function isCollectionProgress(value: unknown): value is CollectionProgress {
+  if (!isObject(value) || !isNonBlank(value.collection_id)) return false
+
+  const counts = [
+    value.records_count,
+    value.expansion_level,
+    value.selected_entities_count,
+    value.vk_requests_count
+  ]
+  const dates = [value.started_at, value.finished_at]
+  const { error, status, stop_reason: reason } = value
+
+  return (
+    (status === 'queued' ||
+      status === 'running' ||
+      status === 'completed' ||
+      status === 'failed') &&
+    counts.every(
+      (count) => typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+    ) &&
+    dates.every(
+      (date) => date === null || (typeof date === 'string' && Number.isFinite(Date.parse(date)))
+    ) &&
+    (error === null ||
+      (isObject(error) &&
+        isNonBlank(error.message) &&
+        (error.code === 'ML_NOT_AVAILABLE' ||
+          error.code === 'ML_ERROR' ||
+          error.code === 'VK_ERROR' ||
+          error.code === 'INTERNAL_ERROR'))) &&
+    (reason === null ||
+      reason === 'max_depth' ||
+      reason === 'no_text_records' ||
+      reason === 'no_new_entities' ||
+      reason === 'no_new_records' ||
+      reason === 'record_limit')
+  )
+}
+
 async function request<T>(
   path: string,
   method: 'GET' | 'POST',
   expectedStatus: number,
   isValid: (value: unknown) => value is T,
-  body?: unknown
+  body?: unknown,
+  signal?: AbortSignal
 ): Promise<T> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
@@ -82,7 +124,7 @@ async function request<T>(
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       credentials: 'omit',
       cache: 'no-store',
       headers:
@@ -167,4 +209,19 @@ export function getModels(): Promise<Model[]> {
 
 export function startCollection(data: StartRequest): Promise<StartResponse> {
   return request('/collection/start', 'POST', 202, isStartResponse, data)
+}
+
+export function getCollectionProgress(
+  collectionId: string,
+  signal?: AbortSignal
+): Promise<CollectionProgress> {
+  return request(
+    `/collection/${encodeURIComponent(collectionId)}/progress`,
+    'GET',
+    200,
+    (value): value is CollectionProgress =>
+      isCollectionProgress(value) && value.collection_id === collectionId,
+    undefined,
+    signal
+  )
 }
